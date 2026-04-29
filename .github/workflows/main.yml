@@ -3,30 +3,41 @@ on:
   workflow_dispatch:
     inputs:
       video_url:
-        description: 'YouTube Link'
+        description: 'YouTube Video ka link yahan paste karein'
         required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Full length video ke liye timeout badha diya hai (optional par safe hai)
+    timeout-minutes: 120 
+
     steps:
-      - uses: actions/checkout@v4
-      - name: 🟢 Setup Deno
+      - name: 📂 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Deno (Fix for YouTube Signature)
         run: |
           curl -fsSL https://deno.land/x/install/install.sh | sh
           echo "/home/runner/.deno/bin" >> $GITHUB_PATH
-      - name: 🐍 Setup Tools
+
+      - name: 🐍 Setup Python & Tools
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
+          # [span_0](start_span)Latest yt-dlp aur edge-tts install karna zaruri hai[span_0](end_span)
           pip install -U yt-dlp requests edge-tts asyncio
-      - name: 🏭 Run Pipeline
+
+      - name: 🏭 Run Final Pipeline (Full Mode)
         env:
           OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
+        # [span_1](start_span)Is baar ye full video process karega bina kisi time limit ke[span_1](end_span)
         run: python final_pipeline.py <<<'${{ github.event.inputs.video_url }}'
-      - name: 📤 Get Video
+
+      - name: 📤 Upload Full Video Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: 2-Min-Recap
+          name: Full-Narrator-Recap
           path: output/final_recap.mp4
-          
+          # [span_2](start_span)Retention days badha sakte ho taaki video delete na ho[span_2](end_span)
+          retention-days: 5
