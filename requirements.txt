@@ -1,1 +1,1 @@
-pip install yt-dlp requests edge-tts
+pip install yt-dlp requests edge-tts asyncio
