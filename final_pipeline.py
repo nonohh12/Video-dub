@@ -22,30 +22,42 @@ def download_video():
     if not url: return False
     
     ydl_opts = {
-        # Format ko simpler rakha hai taaki signature bypass ho sake
-        'format': 'best', 
+        # Format ko flexible rakha hai
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': f'{WORK_DIR}/raw.mp4',
         'overwrites': True,
         'cookiefile': COOKIE_FILE,
         'nocheckcertificate': True,
-        # Mobile clients signatures solve karne mein help karte hain
+        # CRITICAL: Remote challenge solver enable karna
+        'allow_unplayable_formats': True,
+        'remote_components': 'ejs:github', 
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'android', 'web'],
-                'skip': ['dash', 'hls']
+                'player_client': ['web', 'mweb'],
+                # JS challenges solve karne ke liye deno ka use
+                'player_skip': ['web-page-initial-data-verification'],
             }
         },
-        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     }
     
-    print(f"⏳ Attempting bypass download for: {url}")
+    print(f"⏳ Solving JS challenges & downloading: {url}")
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         return True
     except Exception as e:
-        print(f"❌ Bypass Failed: {e}")
-        return False
+        print(f"❌ Final Bypass Failed: {e}")
+        # Fallback: Agar upar wala fail ho, toh bina specific format ke koshish karein
+        print("🔄 Trying minimal fallback...")
+        try:
+            ydl_opts['format'] = 'best'
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            return True
+        except:
+            return False
+            
         
 
 # Baaki functions (clean_visuals, generate_revenge_script, make_dub, merge_final, run) 
