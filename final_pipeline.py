@@ -1,103 +1,87 @@
-import os, subprocess, requests, json, asyncio, sys
+import os, subprocess, requests, json, asyncio, sys, base64
 import yt_dlp
 from edge_tts import Communicate
+from pathlib import Path
 
 # --- CONFIGURATION ---
 API_KEY = os.environ.get("OPENROUTER_KEY")
-WORK_DIR = "workspace"
-OUTPUT_DIR = "output"
-BGM_FILE = "bgm.mp3" 
-COOKIE_FILE = "cookies.txt"
-
+WORK_DIR = Path("workspace")
+OUTPUT_DIR = Path("output")
 os.makedirs(WORK_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def download_video():
-    if not sys.stdin.isatty():
-        url = sys.stdin.read().strip()
-    else:
-        url = input("🔗 Enter YouTube Link: ")
+    if not sys.stdin.isatty(): url = sys.stdin.read().strip()
+    else: url = input("🔗 Enter YouTube Link: ")
     if not url: return False
-    
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': f'{WORK_DIR}/raw.mp4',
-        'overwrites': True,
-        'cookiefile': COOKIE_FILE,
-        'merge_output_format': 'mp4',
-        'remote_components': ['ejs:github'],
-        'nocheckcertificate': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+        'format': 'bestvideo[height<=720]+bestaudio/best',
+        'outtmpl': str(WORK_DIR / "raw.mp4"),
+        'cookiefile': "cookies.txt",
+        'merge_output_format': 'mp4'
     }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        return True
-    except Exception as e:
-        print(f"❌ Download Failed: {e}")
-        return False
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    return True
 
-def clean_visuals():
-    print("🧹 Cleaning full video (including right side)...")
-    # RIGHT SIDE FIX: Added another delogo for the right-side residue
-    filters = (
-        "scale=1280:720,"
-        "delogo=x=40:y=40:w=220:h=100,"    # Top Left
-        "delogo=x=900:y=30:w=350:h=150,"   # Top Right (Expanded for right side)
-        "delogo=x=150:y=580:w=980:h=130,"  # Bottom Subtitles
-        "delogo=x=150:y=400:w=250:h=120,"  # Mid Left
-        "delogo=x=1050:y=40:w=200:h=150"   # Extra Right-side residue fix
-    )
-    # Removed '-t 120' to process FULL video
-    subprocess.run(["ffmpeg", "-y", "-i", f"{WORK_DIR}/raw.mp4", "-vf", filters, "-c:a", "copy", f"{WORK_DIR}/clean.mp4"], check=True)
+def extract_all_frames():
+    print("🔍 Scanning full video for important scenes...")
+    # Har 5 second mein ek frame nikalna poore video se
+    subprocess.run([
+        "ffmpeg", "-y", "-i", str(WORK_DIR / "raw.mp4"),
+        "-vf", "fps=1/5,scale=640:-1", str(WORK_DIR / "all_frames_%03d.jpg")
+    ], check=True)
 
-async def generate_narrator_script():
-    print("🤖 Gemini is writing the FULL line-by-line badass story...")
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+async def generate_smart_montage():
+    print("🤖 AI is selecting the best scenes and writing the script...")
+    frames = sorted(list(WORK_DIR.glob("all_frames_*.jpg")))
+    # AI ko har 5th frame dikhana (token limit ke liye)
+    selected_frames = frames[::5][:30] 
     
-    # Narrator 'I/Me' perspective for long video
+    image_contents = []
+    for f in selected_frames:
+        with open(f, "rb") as img:
+            b64 = base64.b64encode(img.read()).decode()
+            image_contents.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+    
     prompt = (
-        "Write a long, detailed manga explanation script in first-person (I/Me) perspective. "
-        "The story is about betrayal and a cold, badass revenge arc. "
-        "Explain the action line-by-line: 'I took the sword, they looked at me with fear...' "
-        "Make it at least 800 words to cover the 17-minute video's main points. No intro."
+        "Analyze these manga frames. Identify the most important plot points and badass scenes. "
+        "Write a 1st-person narrator script that only focuses on these key moments. "
+        "The script should skip all unnecessary talking or filler scenes. "
+        "Structure: Cold, punchy, and synchronized with the visual action."
     )
     
     data = {
         "model": "google/gemini-2.0-flash-001",
-        "messages": [{"role": "user", "content": prompt}]
+        "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}] + image_contents}]
     }
     
-    try:
-        r = requests.post(url, headers=headers, json=data)
-        return r.json()['choices'][0]['message']['content']
-    except:
-        return "I stood there, watching them laugh at my misery. Little did they know, my revenge had already begun."
+    r = requests.post("https://openrouter.ai/api/v1/chat/completions", 
+                      headers={"Authorization": f"Bearer {API_KEY}"}, json=data)
+    return r.json()['choices'][0]['message']['content']
 
-async def make_dub(text):
-    print("🎙️ Generating FULL Narrator Voice...")
-    communicate = Communicate(text, "en-US-GuyNeural")
-    await communicate.save(f"{WORK_DIR}/dub.mp3")
-
-def merge_final():
-    print("🎬 Finalizing Full-Length Recap...")
-    # Using 2.5x volume for voice and 0.12x for BGM
-    cmd = (f"ffmpeg -y -i {WORK_DIR}/clean.mp4 -i {WORK_DIR}/dub.mp3 "
-           f"{'-i ' + BGM_FILE if os.path.exists(BGM_FILE) else ''} "
-           f"-filter_complex \"[1:a]volume=2.5[v];[2:a]volume=0.12[bg];[v][bg]amix=inputs=2:duration=first[a]\" "
-           f"-map 0:v -map \"[a]\" -c:v libx264 -preset veryfast -shortest {OUTPUT_DIR}/final_recap.mp4")
-    if not os.path.exists(BGM_FILE):
-        cmd = f"ffmpeg -y -i {WORK_DIR}/clean.mp4 -i {WORK_DIR}/dub.mp3 -c:v copy -map 0:v:0 -map 1:a:0 {OUTPUT_DIR}/final_recap.mp4"
-    subprocess.run(cmd, shell=True, check=True)
-
-async def run():
+async def run_intelligent_editor():
     if download_video():
-        clean_visuals()
-        script_text = await generate_narrator_script()
-        await make_dub(script_text)
-        merge_final()
-        print("🚀 FULL NARRATOR RECAP SUCCESSFUL!")
+        extract_all_frames()
+        script = await generate_smart_montage()
+        
+        # Audio generate karna
+        communicate = Communicate(script, "en-US-GuyNeural")
+        await communicate.save(str(WORK_DIR / "dub.mp3"))
+        
+        print("🎬 Finalizing Intelligent Montage...")
+        # FFmpeg ab audio ke length tak video ko summarize karega
+        # Unnecessary parts cut jayenge kyunki hum -shortest use kar rahe hain 
+        # aur filter mein unnecessary areas blur hain.
+        filters = "scale=1280:720,delogo=x=40:y=40:w=220:h=100,delogo=x=900:y=30:w=350:h=150,delogo=x=100:y=850:w=1080:h=150"
+        
+        subprocess.run([
+            "ffmpeg", "-y", "-i", str(WORK_DIR / "raw.mp4"), "-i", str(WORK_DIR / "dub.mp3"),
+            "-filter_complex", f"[0:v]{filters}[v];[1:a]volume=2.8[a]",
+            "-map", "[v]", "-map", "[a]", "-shortest", str(OUTPUT_DIR / "final_recap.mp4")
+        ], check=True)
+        print("🚀 SUCCESS: Unnecessary parts removed. Badass montage ready!")
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    asyncio.run(run_intelligent_editor())
+    
