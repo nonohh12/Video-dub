@@ -13,34 +13,40 @@ os.makedirs(WORK_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def download_video():
+    import sys
     if not sys.stdin.isatty():
         url = sys.stdin.read().strip()
     else:
         url = input("🔗 Enter Win-XS YouTube Link: ")
         
-    if not url: 
-        print("❌ No URL provided!")
-        return False
+    if not url: return False
     
     ydl_opts = {
-        # Format ko thoda loose kiya hai taki error na aaye
-        'format': 'bestvideo+bestaudio/best',
+        # Format ko simpler rakha hai taaki signature bypass ho sake
+        'format': 'best', 
         'outtmpl': f'{WORK_DIR}/raw.mp4',
         'overwrites': True,
         'cookiefile': COOKIE_FILE,
-        'merge_output_format': 'mp4', # Force merge to mp4
         'nocheckcertificate': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        # Mobile clients signatures solve karne mein help karte hain
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android', 'web'],
+                'skip': ['dash', 'hls']
+            }
+        },
+        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
     }
     
-    print(f"⏳ Downloading video with Node.js support...")
+    print(f"⏳ Attempting bypass download for: {url}")
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         return True
     except Exception as e:
-        print(f"❌ Download Failed: {e}")
+        print(f"❌ Bypass Failed: {e}")
         return False
+        
 
 # Baaki functions (clean_visuals, generate_revenge_script, make_dub, merge_final, run) 
 # bilkul vahi rahenge jo maine pichle response mein diye the.
