@@ -13,15 +13,18 @@ jobs:
       - name: 📂 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js (Fix for YouTube Signature)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: 🐍 Setup Python & Tools
+      - name: 🟢 Setup Node.js & Deno
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
-          pip install yt-dlp requests edge-tts asyncio
+          sudo apt-get update
+          sudo apt-get install -y curl
+          curl -fsSL https://deno.land/x/install/install.sh | sh
+          echo "/home/runner/.deno/bin" >> $GITHUB_PATH
+
+      - name: 🐍 Setup Python & Latest yt-dlp
+        run: |
+          sudo apt-get install -y ffmpeg
+          # Force update yt-dlp to latest nightly version
+          pip install -U --no-cache-dir yt-dlp requests edge-tts asyncio
 
       - name: 🏭 Run Final Pipeline
         env:
