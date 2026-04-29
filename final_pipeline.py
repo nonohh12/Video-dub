@@ -12,18 +12,27 @@ os.makedirs(WORK_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def download_video():
-    url = input("🔗 Enter Win-XS YouTube Link: ")
-    if not url: return False
+    # GitHub Actions ke liye input handle karne ka tarika
+    import sys
+    if not sys.stdin.isatty():
+        url = sys.stdin.read().strip()
+    else:
+        url = input("🔗 Enter Win-XS YouTube Link: ")
+        
+    if not url: 
+        print("❌ No URL provided!")
+        return False
     
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
         'outtmpl': f'{WORK_DIR}/raw.mp4',
         'overwrites': True
     }
-    print("⏳ Downloading video...")
+    print(f"⏳ Downloading: {url}")
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
     return True
+    
 
 def clean_visuals():
     print("🧹 Removing Chinese text and watermarks...")
