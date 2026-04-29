@@ -1,43 +1,19 @@
-name: 🎬 Pro Manga Translator
+name: 🎬 Win-XS Auto Recapper
 on:
   workflow_dispatch:
-    inputs:
-      video_url:
-        description: 'YouTube Video Link'
-        required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Install Tools
+
+      - name: Setup Environment
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
           pip install yt-dlp requests edge-tts
 
-      - name: 1. Download
-        run: python downloader.py <<<'${{ github.event.inputs.video_url }}'
-
-      - name: 2. Clean Watermarks
-        run: python cleaner.py
-
-      - name: 3. Process & Dub
+      - name: Run Pipeline
         env:
           OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
         run: python processor.py
-
-      - name: 4. Final Merge (Video + Dub + BGM)
-        run: |
-          # BGM file 'bgm.mp3' aapke repo mein honi chahiye
-          ffmpeg -i workspace/clean_video.mp4 -i workspace/dub.mp3 -i bgm.mp3 \
-          -filter_complex "[1:a]volume=1.5[vocal];[2:a]volume=0.1[bg];[vocal][bg]amix=inputs=2:duration=first[a]" \
-          -map 0:v -map "[a]" -c:v libx264 -shortest output_final.mp4
-
-      - name: Upload Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: Dubbed-Video
-          path: output_final.mp4
-          
