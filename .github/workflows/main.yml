@@ -1,19 +1,32 @@
-name: 🎬 Win-XS Auto Recapper
+name: 🎬 Win-XS Auto Recapper Pro
 on:
   workflow_dispatch:
+    inputs:
+      video_url:
+        description: 'YouTube Video Link dalo'
+        required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 📂 Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Setup Environment
+      - name: 🐍 Setup Environment
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
-          pip install yt-dlp requests edge-tts
+          pip install yt-dlp requests edge-tts asyncio
 
-      - name: Run Pipeline
+      - name: 🏭 Run Final Pipeline
         env:
           OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
-        run: python processor.py
+        # Is line mein hum user ka input URL script ko pass kar rahe hain
+        run: python final_pipeline.py <<<'${{ github.event.inputs.video_url }}'
+
+      - name: 📤 Download Result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Final-Manga-Recap
+          path: output/final_recap.mp4
